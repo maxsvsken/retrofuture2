@@ -1523,16 +1523,17 @@ details[open].faq-item p {
 
     .hero {
         padding-top: 120px;
+        padding-bottom: 80px; /* Добавляем отступ снизу для кнопки */
         align-items: center;
         height: auto;
         min-height: 100vh;
     }
 
     .hero-layout {
-        flex-direction: column-reverse; /* Сначала картинка, потом текст на мобильных */
+        flex-direction: column; /* Сначала текст, потом картинка */
         justify-content: center;
         text-align: center;
-        gap: 40px;
+        gap: 50px;
         margin-top: 0;
     }
 
