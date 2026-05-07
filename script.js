@@ -1,26 +1,105 @@
+// ============================================================
+// SITUATIONS CAROUSEL — WHEEL GUARD + SMOOTH ENGINE
+// Регистрируется ДО Lenis, перехватывает wheel первым.
+// Единый _sitScrollTo используется dots, thumb и drag.
+// ============================================================
+(function() {
+    let el      = null;   // carousel element (lazy)
+    let target  = 0;      // целевая позиция
+    let current = 0;      // текущая анимированная позиция
+    let raf     = null;   // RAF handle
+
+    function getEl() {
+        if (!el) el = document.getElementById('sitCarousel');
+        return el;
+    }
+
+    // Плавный скролл через lerp (используется всеми механизмами)
+    function tick() {
+        const c = getEl();
+        if (!c) { raf = null; return; }
+
+        const max = c.scrollWidth - c.clientWidth;
+        target  = Math.max(0, Math.min(max, target));
+        current = Math.max(0, Math.min(max, current));
+
+        const diff = target - current;
+        current += diff * 0.12;
+        c.scrollLeft = current; 
+        
+        // Принудительная синхронизация ползунка и точек на каждом кадре
+        if (typeof window._sitSync === 'function') window._sitSync();
+
+        if (Math.abs(diff) > 0.5) {
+            raf = requestAnimationFrame(tick);
+        } else {
+            c.scrollLeft = current = target;
+            if (typeof window._sitSync === 'function') window._sitSync();
+            raf = null;
+        }
+    }
+
+    // Публичный API — используется из initSitCarousel
+    window._sitScrollTo = function(pos) {
+        const c = getEl();
+        if (!c) return;
+        // Если позиция сильно отличается от current (например, после drag) — синхронизируем
+        if (Math.abs(current - c.scrollLeft) > 5) current = c.scrollLeft;
+        target = pos;
+        if (!raf) raf = requestAnimationFrame(tick);
+    };
+
+    // Wheel guard — должен быть раньше Lenis
+    window.addEventListener('wheel', function(e) {
+        const c = getEl();
+        if (!c) return;
+        
+        // Проверяем, находится ли курсор над каруселью или элементами управления
+        const isOverCarousel = c.contains(e.target) || e.target === c || e.target.closest('.sit-controls');
+        if (!isOverCarousel) return;
+
+        const max = c.scrollWidth - c.clientWidth;
+        if (max <= 0) return;
+
+        const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+
+        // "Липкий" скролл: блокируем прокрутку страницы, если мы внутри карусели.
+        // Пропускаем только если достигнут край и пользователь продолжает скроллить в ту же сторону.
+        if (c.scrollLeft <= 0 && delta < 0) return;
+        if (c.scrollLeft >= max - 1 && delta > 0) return;
+
+        e.preventDefault();
+        e.stopImmediatePropagation();
+
+        // Синхронизируем current перед началом анимации
+        if (Math.abs(current - c.scrollLeft) > 5) current = c.scrollLeft;
+        
+        target = Math.max(0, Math.min(max, target + delta * 1.5));
+        if (!raf) raf = requestAnimationFrame(tick);
+
+    }, { passive: false, capture: true });
+}());
+
+
 document.addEventListener('DOMContentLoaded', () => {
     // --- Smooth Scrolling (Lenis) ---
     if (typeof Lenis !== 'undefined') {
         const lenis = new Lenis({
-            duration: 1.6, // Increased for a more 'premium' felt smoothness
+            duration: 1.6, 
             easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)), 
             smoothWheel: true,
-            wheelMultiplier: 1.1, // Slightly more responsive
+            wheelMultiplier: 1.1, 
             touchMultiplier: 2,
-            // Keep native mobile touch scrolling for performance and natural feel
             smoothTouch: false,
         });
         window.lenis = lenis;
 
-        // Sync Lenis with GSAP ScrollTrigger
         lenis.on('scroll', ScrollTrigger.update);
 
-        // Add Lenis's requestAnimationFrame (raf) to GSAP's ticker
         gsap.ticker.add((time) => {
             lenis.raf(time * 1000);
         });
 
-        // Disable GSAP's lag smoothing, required when syncing with an external raf mechanism
         gsap.ticker.lagSmoothing(0);
     }
 
@@ -43,7 +122,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        // Close menu when clicking outside
         document.addEventListener('click', (e) => {
             if (navLinks.classList.contains('nav-active') && !navLinks.contains(e.target) && !burger.contains(e.target)) {
                 navLinks.classList.remove('nav-active');
@@ -55,27 +133,20 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-
-
     // --- Hero GSAP Animation ---
     function initHeroAnimation() {
-        // Make elements visible immediately
         gsap.set([".hero-image-wrapper", ".hero-title", ".hero-subtitle", ".title-word", ".hero-btn"], { autoAlpha: 1 });
-
         const tl = gsap.timeline({ defaults: { ease: "power4.out" } });
-
         tl.from(".hero-image-wrapper", { y: 100, rotateX: 15, autoAlpha: 0, scale: 0.8, duration: 1.5 })
             .from(".hero-image", { scale: 1.4, duration: 1.5 }, "<")
             .from(".hero-btn", { y: 40, autoAlpha: 0, duration: 1.2, ease: "back.out(1.5)" }, "-=0.8");
     }
-
     initHeroAnimation();
     
     // --- About staggered text animation ---
     function initAboutAnimation() {
         const title = document.querySelector('.stagger-text');
         if (!title) return;
-
         gsap.from(title, {
             scrollTrigger: {
                 trigger: title,
@@ -88,7 +159,6 @@ document.addEventListener('DOMContentLoaded', () => {
             ease: "power2.out"
         });
     }
-
     initAboutAnimation();
 
     // --- Smooth Scroll Stacking Accordion GSAP ---
@@ -101,20 +171,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (!cards.length || !grid || !texts.length || !container) return;
 
-        // Reset previous properties
-        gsap.set(cards, { clearProps: "all" });
-        gsap.set(texts, { clearProps: "all" });
-
-        // Collapse ALL cards, including the last one
-        const textsToAnimate = texts;
-        const cardsToAnimate = cards;
-
-        // Use GSAP matchMedia to only stack on desktop, keeping mobile flow natural
         let mm = gsap.matchMedia();
-
         mm.add("(min-width: 901px)", () => {
             const totalScrollDistance = window.innerHeight * 2.5; 
-            
             const tl = gsap.timeline({
                 scrollTrigger: {
                     trigger: section,
@@ -126,68 +185,35 @@ document.addEventListener('DOMContentLoaded', () => {
                     invalidateOnRefresh: true
                 }
             });
-            // Loop through each card for granular control
-            textsToAnimate.forEach((text, i) => {
-                const card = cardsToAnimate[i];
-                
-                // If it's the LAST card, add a buffer to let the user 'view' the content
-                if (i === textsToAnimate.length - 1) {
-                    tl.to({}, { duration: 2 }); 
-                }
-
-                // Phase 1: Collapse the text
-                tl.to(text, {
-                    height: 0,
-                    opacity: 0,
-                    duration: 1,
-                    ease: "power2.inOut"
-                })
-                // Phase 2: Scale card down slightly to show it's stacking underneath
-                .to(card, {
-                    opacity: 0.7,
-                    scale: 0.98,
-                    marginTop: -10,
-                    duration: 0.6,
-                    ease: "none"
-                }, "<"); 
-                
-                // Add a small pause in scrub timeline between card steps
+            texts.forEach((text, i) => {
+                const card = cards[i];
+                if (i === texts.length - 1) tl.to({}, { duration: 2 }); 
+                tl.to(text, { height: 0, opacity: 0, duration: 1, ease: "power2.inOut" })
+                  .to(card, { opacity: 0.7, scale: 0.98, marginTop: -10, duration: 0.6, ease: "none" }, "<"); 
                 tl.to({}, { duration: 0.2 }); 
             });
         });
-
         mm.add("(max-width: 900px)", () => {
-            // Mobile: kill previous triggers if any and ensure blocks are visible
             gsap.set(cards, { clearProps: "all" });
             gsap.set(texts, { clearProps: "all" });
         });
-
-        // Force refresh
         ScrollTrigger.refresh();
     }
-
-    // Delay initialization slightly to ensure offsetHeights are ready
     setTimeout(initStackingAccordion, 300);
 
     // --- Smooth Scroll for anchors ---
     const navAnchors = document.querySelectorAll('.nav-btn, .dot-btn, .logo, .dot-nav a, .hero-btn');
-
     navAnchors.forEach(anchor => {
         anchor.addEventListener('click', function (e) {
             const href = this.getAttribute('href');
             if (!href) return;
-
-            // --- Unified Heavy-Duty Smooth Scroll ---
             e.preventDefault();
             const isHome = href === '#' || href === '#hero';
             const targetId = isHome ? '#hero' : href;
             const targetElement = document.querySelector(targetId);
 
-            // Handle mobile menu cleanup FIRST
-            const mobileMenuWasOpen = navLinks && navLinks.classList.contains('nav-active');
-            if (mobileMenuWasOpen) {
+            if (navLinks && navLinks.classList.contains('nav-active')) {
                 navLinks.classList.remove('nav-active');
-                navLinks.style.display = '';
                 const b = document.getElementById('burger');
                 if (b) b.classList.remove('open');
                 const n = document.querySelector('.navbar');
@@ -196,14 +222,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             if (!targetElement) return;
-
-            // Delay scroll so the mobile menu has time to collapse first,
-            // ensuring getBoundingClientRect returns the correct position
-            const delay = mobileMenuWasOpen ? 120 : 0;
-
             setTimeout(() => {
                 if (window.ScrollTrigger) ScrollTrigger.refresh();
-
                 let yPos = 0;
                 if (!isHome) {
                     if (targetElement.navTrigger) {
@@ -213,121 +233,79 @@ document.addEventListener('DOMContentLoaded', () => {
                         yPos = targetElement.getBoundingClientRect().top + window.scrollY - navHeight;
                     }
                 }
-
                 if (window.lenis) {
                     window.lenis.scrollTo(yPos, { duration: 0.9, ease: (t) => 1 - Math.pow(1 - t, 3) });
-                } else if (window.gsap) {
-                    gsap.to(window, { duration: 0.8, scrollTo: yPos, ease: 'power2.out', overwrite: 'auto' });
                 } else {
                     window.scrollTo({ top: yPos, behavior: 'smooth' });
                 }
-            }, delay);
+            }, 150);
         });
     });
 
-    // --- Counter Animation for Stats ---
+    // --- Counter Animation ---
     const counters = document.querySelectorAll('.counter');
-    const speed = 100; // Fewer steps make it feel more deliberate and slower
-
     const animateCounters = () => {
         counters.forEach(counter => {
             const animate = () => {
-                const target = +counter.getAttribute('data-target');
+                const targetValue = +counter.getAttribute('data-target');
                 const hasPlus = counter.getAttribute('data-plus') === 'true';
                 const prefix = counter.getAttribute('data-prefix') || '';
                 const suffix = counter.getAttribute('data-suffix') || '';
-                
-                // Get current numeric value from text
-                const countString = counter.innerText
-                    .replace(prefix, '')
-                    .replace(suffix, '')
-                    .replace('%', '')
-                    .replace('+', '');
-                
+                const countString = counter.innerText.replace(/[^\d]/g, '');
                 const count = +countString || 0;
-                const inc = Math.max(target / speed, 1);
+                const inc = Math.max(targetValue / 100, 1);
 
-                if (count < target) {
-                    const nextCount = Math.min(count + inc, target);
+                if (count < targetValue) {
+                    const nextCount = Math.min(count + inc, targetValue);
                     let displayValue = Math.ceil(nextCount);
-                    
-                    let result = prefix + displayValue;
-                    if (hasPlus) result += '+';
-                    result += suffix;
-                    
-                    counter.innerText = result;
+                    counter.innerText = prefix + displayValue + (hasPlus ? '+' : '') + suffix;
                     setTimeout(animate, 30);
                 } else {
-                    let result = prefix + target;
-                    if (hasPlus) result += '+';
-                    result += suffix;
-                    counter.innerText = result;
+                    counter.innerText = prefix + targetValue + (hasPlus ? '+' : '') + suffix;
                 }
             }
             animate();
         });
     }
-
     const observer = new IntersectionObserver((entries) => {
         entries.forEach(entry => {
             if (entry.isIntersecting) {
-                // Reset before starting animation
                 counters.forEach(c => c.innerText = '0');
                 animateCounters();
             }
         });
     }, { threshold: 0.2 });
-
     const statsStrip = document.querySelector('.stats-strip');
-    if (statsStrip) {
-        observer.observe(statsStrip);
-    }
+    if (statsStrip) observer.observe(statsStrip);
 
-    const dotBtns = document.querySelectorAll('.dot-btn');
-
-    const updateDot = (index) => {
-        dotBtns.forEach((btn, i) => {
-            btn.classList.toggle('active', i === index);
-        });
-    };
-
-    // --- GSAP Zoom Scroll Animation ---
+    // --- GSAP Scroll Logic ---
     if (typeof gsap !== 'undefined' && typeof ScrollTrigger !== 'undefined') {
         gsap.registerPlugin(ScrollTrigger, ScrollToPlugin);
-
         const sections = document.querySelectorAll('section');
-
+        const dotBtns = document.querySelectorAll('.dot-btn');
+        const updateDot = (index) => {
+            dotBtns.forEach((btn, i) => btn.classList.toggle('active', i === index));
+        };
 
         sections.forEach((section, index) => {
-            const container = section.querySelector('.container');
-
-            // Pre-calculate permanent anchor trigger for pixel-perfect navigation targeting
             if (section.id !== 'hero') {
                 section.navTrigger = ScrollTrigger.create({
                     trigger: section,
-                    start: "top 70px" // Header offset
+                    start: "top 70px"
                 });
             }
-
-            // Stacking context
-            // Give normal flow to myths, projects, contacts and director so they don't overlap incorrectly
-            const isNormalStacking = section.id === 'myths' || section.id === 'projects' || section.id === 'contact' || section.id === 'director';
-            
+            const isNormalStacking = ['myths', 'projects', 'contact', 'director'].includes(section.id);
             gsap.set(section, {
                 position: 'relative',
                 zIndex: isNormalStacking ? 'auto' : (sections.length - index),
-                opacity: 1 // Ensure section itself is visible
+                opacity: 1
             });
 
-            // Special handling for the Code (rules) section - on all devices
             if (section.id === 'code') {
                 const list = section.querySelector('.code-list');
                 const sidebar = section.querySelector('.code-sidebar');
-                const title = section.querySelector('.code-main-title');
-
                 if (list && sidebar) {
                     let mm = gsap.matchMedia();
-
                     mm.add("(min-width: 1321px)", () => {
                         let scrollDistance = 0;
                         const tl = gsap.timeline({
@@ -337,206 +315,37 @@ document.addEventListener('DOMContentLoaded', () => {
                                 end: () => `+=${scrollDistance}`,
                                 pin: true,
                                 scrub: 1,
-                                pinSpacing: true,
                                 onRefresh: () => {
-                                    gsap.set(sidebar, { clearProps: "all" });
-                                    gsap.set(list, { clearProps: "all" });
-                                    if (title) gsap.set(title, { clearProps: "all" });
-                                    const listHeight = list.scrollHeight;
-                                    const containerHeight = list.parentElement.offsetHeight;
-                                    // Scroll exactly to the end of the list
-                                    scrollDistance = Math.max(0, listHeight - containerHeight);
+                                    scrollDistance = Math.max(0, list.scrollHeight - list.parentElement.offsetHeight);
                                 },
                                 onUpdate: (self) => {
-                                    if (scrollDistance > 0) {
-                                        const scrollY = scrollDistance * self.progress;
-                                        // Use precise transform to match the bottom boundary
-                                        gsap.set(list, { y: -scrollY, force3D: true });
-                                    }
+                                    if (scrollDistance > 0) gsap.set(list, { y: -scrollDistance * self.progress, force3D: true });
                                 }
                             }
                         });
-
-                        ScrollTrigger.create({
-                            trigger: section,
-                            start: "top 50%",
-                            end: () => `+=${scrollDistance}`,
-                            onEnter: () => updateDot(index),
-                            onEnterBack: () => updateDot(index)
-                        });
+                        ScrollTrigger.create({ trigger: section, start: "top 50%", end: () => `+=${scrollDistance}`, onEnter: () => updateDot(index), onEnterBack: () => updateDot(index) });
                     });
-
-                    mm.add("(max-width: 1320px)", () => {
-                        gsap.set(sidebar, { clearProps: "all" });
-                        gsap.set(list, { clearProps: "all" });
-                        if (title) gsap.set(title, { clearProps: "all" });
-                        
-                        ScrollTrigger.create({
-                            trigger: section,
-                            start: "top 50%",
-                            end: "bottom 50%",
-                            onEnter: () => updateDot(index),
-                            onEnterBack: () => updateDot(index)
-                        });
-                    });
-
-                    return; // Skip default logic for this section
+                    return;
                 }
             }
 
-            // Мифы, руководство, экспертиза и инвесторы не должны фиксироваться и исчезать мгновенно
-            const isLongSection = section.offsetHeight > window.innerHeight * 1.2 || 
-                                 ['myths', 'director', 'code', 'hero', 'projects', 'today', 'investors'].includes(section.id);
-
-            if (!isLongSection) {
-                const tl = gsap.timeline({
-                    scrollTrigger: {
-                        trigger: section,
-                        start: "top top",
-                        end: "+=100%",
-                        pin: true,
-                        scrub: 1,
-                        pinSpacing: true
-                    }
-                });
-
-                // Animate container scale and opacity instead of the section
-                if (container) {
-                    tl.to(container, {
-                        opacity: 0,
-                        scale: 0.85,
-                        ease: "power1.inOut"
-                    });
-                }
-            } else {
-                // Только для обычных длинных секций делаем fade-out, исключаем ключевые разделы
-                if (container && !['myths', 'director', 'code', 'projects', 'today', 'investors'].includes(section.id)) {
-                    // Adjust fade-out start for mobile to prevent early disappearance
-                    const fadeStart = window.innerWidth < 768 ? "bottom 100%" : "bottom 80%";
-                    
-                    gsap.to(container, {
-                        opacity: 0,
-                        scale: 0.9,
-                        scrollTrigger: {
-                            trigger: section,
-                            start: fadeStart,
-                            end: "bottom top",
-                            scrub: 1
-                        }
-                    });
-                }
-            }
-            // Dot tracking
-            ScrollTrigger.create({
-                trigger: section,
-                start: "top 50%",
-                end: "bottom 50%",
-                onEnter: () => updateDot(index),
-                onEnterBack: () => updateDot(index)
-            });
-        });
-
-        // Ensure footer visibility
-        if (footer) {
-            gsap.set(footer, { position: 'relative', zIndex: 100 });
-            ScrollTrigger.create({
-                trigger: footer,
-                start: "top 90%",
-                onEnter: () => updateDot(sections.length),
-                onEnterBack: () => updateDot(sections.length)
-            });
-        }
-
-        // --- Together Section Animation ---
-        const togetherCards = gsap.utils.toArray('.together-card');
-        if (togetherCards.length) {
-            gsap.from(togetherCards, {
-                scrollTrigger: {
-                    trigger: '#together',
-                    start: 'top 85%', // Trigger as soon as the section is well into view
-                    toggleActions: 'play none none none'
-                },
-                x: (i) => i % 2 === 0 ? -100 : 100,
-                opacity: 0,
-                duration: 0.8,
-                stagger: 0.15,
-                ease: 'power3.out',
-                clearProps: 'all' // Ensures inline transforms are removed so CSS hover works
-            });
-        }
-
-        window.addEventListener('load', () => {
-            setTimeout(() => {
-                ScrollTrigger.refresh();
-                
-                // --- Manual Robust Snapping for Lenis ---
-                ScrollTrigger.create({
-                    start: 0,
-                    end: "max",
-                    onScrollEnd: (self) => {
-                        const scrollY = window.scrollY || window.pageYOffset;
-                        const threshold = 250;
-                        let targetY = -1;
-                        let minDiff = threshold;
-
-                        sections.forEach(s => {
-                            const sectionTop = (s.id === 'hero') ? 0 : (s.navTrigger ? s.navTrigger.start : 0);
-                            const diff = Math.abs(scrollY - sectionTop);
-                            
-                            if (diff < minDiff) {
-                                minDiff = diff;
-                                targetY = sectionTop;
-                            }
-                        });
-
-                        // If we found a close section and it's not the current position
-                        if (targetY !== -1 && Math.abs(scrollY - targetY) > 5) {
-                            if (window.lenis) {
-                                window.lenis.scrollTo(targetY, {
-                                    duration: 0.8,
-                                    easing: (t) => Math.min(1, 1.001 * Math.pow(2, -10 * t)),
-                                    lock: false
-                                });
-                            }
-                        }
-                    }
-                });
-            }, 500);
+            ScrollTrigger.create({ trigger: section, start: "top 50%", end: "bottom 50%", onEnter: () => updateDot(index), onEnterBack: () => updateDot(index) });
         });
     }
 
-    // --- Contact Form Submission ---
+    // --- Contact Form ---
     const contactForm = document.getElementById('contactForm');
     if (contactForm) {
         contactForm.addEventListener('submit', function (e) {
             e.preventDefault();
-
-            // Collect data
-            const formData = new FormData(this);
-            const data = Object.fromEntries(formData.entries());
-
-            // Simulation of sending
-            console.log('Sending data:', data);
-
-            // Response to user
             const btn = this.querySelector('button');
             const originalText = btn.innerText;
-
             btn.innerText = 'ОТПРАВЛЕНО';
             btn.style.backgroundColor = '#28a745';
             btn.disabled = true;
-
-            alert('Спасибо! Ваш запрос успешно отправлен. Мы свяжемся с вами в ближайшее время.');
-
-            // Reset form
+            alert('Спасибо! Ваш запрос успешно отправлен.');
             this.reset();
-
-            // Restore button after 3 seconds
-            setTimeout(() => {
-                btn.innerText = originalText;
-                btn.style.backgroundColor = '';
-                btn.disabled = false;
-            }, 3000);
+            setTimeout(() => { btn.innerText = originalText; btn.style.backgroundColor = ''; btn.disabled = false; }, 3000);
         });
     }
 
@@ -544,49 +353,98 @@ document.addEventListener('DOMContentLoaded', () => {
     const modal = document.getElementById('policyModal');
     const policyLink = document.getElementById('policyLink');
     const closeBtn = document.querySelector('.close-modal');
-
     if (modal && policyLink && closeBtn) {
-        policyLink.addEventListener('click', (e) => {
-            e.preventDefault();
-            modal.classList.add('active');
-            document.body.style.overflow = 'hidden'; // Lock scroll
-        });
-
-        closeBtn.addEventListener('click', () => {
-            modal.classList.remove('active');
-            document.body.style.overflow = ''; // Unlock scroll
-        });
-
-        window.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                modal.classList.remove('active');
-                document.body.style.overflow = ''; // Unlock scroll
-            }
-        });
+        policyLink.addEventListener('click', (e) => { e.preventDefault(); modal.classList.add('active'); document.body.style.overflow = 'hidden'; });
+        closeBtn.addEventListener('click', () => { modal.classList.remove('active'); document.body.style.overflow = ''; });
+        window.addEventListener('click', (e) => { if (e.target === modal) { modal.classList.remove('active'); document.body.style.overflow = ''; } });
     }
 
-    // --- FAQ (Myths & Expertise) Refresh ScrollTrigger on toggle ---
-    const allDetails = document.querySelectorAll('details');
-    allDetails.forEach(detail => {
+    // --- FAQ Toggle ---
+    document.querySelectorAll('details').forEach(detail => {
         detail.addEventListener('toggle', () => {
-            // Give it a tiny moment for the browser to calculate the new height
-            setTimeout(() => {
-                if (window.ScrollTrigger) {
-                    ScrollTrigger.refresh();
-                }
-            }, 100); // Slightly more delay for stability
+            setTimeout(() => { if (window.ScrollTrigger) ScrollTrigger.refresh(); }, 100);
         });
     });
 
-    // --- Navbar Scroll Logic ---
+    // --- Navbar Logic ---
     const navbar = document.querySelector('.navbar');
     if (navbar) {
         window.addEventListener('scroll', () => {
-            if (window.scrollY > 50) {
-                navbar.classList.add('navbar-scrolled');
-            } else {
-                navbar.classList.remove('navbar-scrolled');
-            }
+            if (window.scrollY > 50) navbar.classList.add('navbar-scrolled');
+            else navbar.classList.remove('navbar-scrolled');
         });
     }
+
+    // --- Situations Carousel ---
+    (function initSitCarousel() {
+        const carousel = document.getElementById('sitCarousel');
+        const thumb    = document.getElementById('sitScrollThumb');
+        const track    = thumb ? thumb.parentElement : null;
+        const dots     = Array.from(document.querySelectorAll('.sit-dot'));
+        const cards    = carousel ? Array.from(carousel.querySelectorAll('.sit-card')) : [];
+        if (!carousel || !thumb || !track || !cards.length) return;
+
+        carousel.setAttribute('data-lenis-prevent', '');
+        carousel.style.scrollBehavior = 'auto';
+
+        function sync() {
+            const sL  = carousel.scrollLeft;
+            const max = carousel.scrollWidth - carousel.clientWidth;
+            const ratio = max > 0 ? sL / max : 0;
+            if (track && thumb) {
+                const tW = Math.max(40, track.clientWidth * (carousel.clientWidth / carousel.scrollWidth));
+                thumb.style.width = tW + 'px';
+                thumb.style.left  = (ratio * (track.clientWidth - tW)) + 'px';
+            }
+            let closest = 0, minDist = Infinity;
+            cards.forEach((card, i) => {
+                const dist = Math.abs(card.offsetLeft - sL);
+                if (dist < minDist) { minDist = dist; closest = i; }
+            });
+            dots.forEach((d, i) => d.classList.toggle('active', i === Math.min(closest, dots.length - 1)));
+        }
+        window._sitSync = sync;
+        carousel.addEventListener('scroll', sync, { passive: true });
+        window.addEventListener('load', sync);
+        setTimeout(sync, 400);
+
+        dots.forEach((dot, idx) => {
+            dot.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                window._sitScrollTo(cards[idx].offsetLeft);
+            });
+        });
+
+        track.addEventListener('click', (e) => {
+            if (e.target === thumb) return;
+            const ratio = Math.max(0, Math.min(1, (e.clientX - track.getBoundingClientRect().left) / track.clientWidth));
+            window._sitScrollTo(ratio * (carousel.scrollWidth - carousel.clientWidth));
+        });
+
+        let tDrag = false, tStartX = 0, tStartL = 0;
+        thumb.addEventListener('mousedown', (e) => {
+            tDrag = true; tStartX = e.clientX; tStartL = parseFloat(thumb.style.left) || 0;
+            e.preventDefault(); e.stopPropagation();
+        });
+
+        let cDrag = false, cStartX = 0, cStartL = 0;
+        carousel.addEventListener('mousedown', (e) => {
+            if (e.target === thumb || e.target === track) return;
+            cDrag = true; cStartX = e.clientX; cStartL = carousel.scrollLeft;
+            carousel.classList.add('is-dragging'); e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (tDrag) {
+                const maxL = track.clientWidth - thumb.offsetWidth;
+                const newL = Math.max(0, Math.min(maxL, tStartL + e.clientX - tStartX));
+                window._sitScrollTo((newL / maxL) * (carousel.scrollWidth - carousel.clientWidth));
+            } else if (cDrag) {
+                window._sitScrollTo(cStartL - (e.clientX - cStartX));
+            }
+        });
+
+        document.addEventListener('mouseup', () => { tDrag = cDrag = false; carousel.classList.remove('is-dragging'); });
+    })();
 });
