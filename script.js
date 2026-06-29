@@ -281,7 +281,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- GSAP Scroll Logic ---
     if (typeof gsap !== 'undefined' && typeof ScrollTrigger !== 'undefined') {
         gsap.registerPlugin(ScrollTrigger, ScrollToPlugin);
-        const sections = document.querySelectorAll('section');
+        const sections = document.querySelectorAll('section, footer#contact');
         const dotBtns = document.querySelectorAll('.dot-btn');
         const updateDot = (index) => {
             dotBtns.forEach((btn, i) => btn.classList.toggle('active', i === index));
@@ -294,7 +294,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     start: "top 70px"
                 });
             }
-            const isNormalStacking = ['myths', 'projects', 'contact', 'director'].includes(section.id);
+            const isNormalStacking = ['contact', 'director'].includes(section.id);
             gsap.set(section, {
                 position: 'relative',
                 zIndex: isNormalStacking ? 'auto' : (sections.length - index),
