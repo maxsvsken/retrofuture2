@@ -2808,4 +2808,27 @@ details[open].expertise-item .exp-content {
     filter: invert(1) grayscale(1) brightness(2) opacity(1);
 }
 
+/* Header Logo Styles */
+.nav-logo {
+    height: 45px;
+    width: auto;
+    object-fit: contain;
+    transition: height 0.4s ease;
+}
+
+/* Shrink on scrolled navbar */
+.navbar-scrolled .nav-logo {
+    height: 35px;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+    .nav-logo {
+        height: 35px;
+    }
+    .navbar-scrolled .nav-logo {
+        height: 30px;
+    }
+}
+
 
